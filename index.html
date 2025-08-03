@@ -105,7 +105,8 @@
     </header>
 
     <main>
-        <input type="file" id="pdfFile" accept=".pdf">
+        <input type="file" id="fileInput" accept=".pdf,.xlsx,.xls">
+
         <input type="password" id="ghlToken" placeholder="GHL access code">
         <button onclick="importCandidates()">Import candidates</button>
         <div id="loading">Loading...</div>
@@ -123,6 +124,9 @@
         <p>&copy; 2025 My Xcell Network</p>
     </footer>
 
+    <!-- SheetJS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- PDF.js -->
     <script type="module">
         import * as pdfjsLib from 'https://mozilla.github.io/pdf.js/build/pdf.mjs';
 
@@ -144,7 +148,7 @@
          * 
          */
         async function importCandidates() {
-            const fileInput = document.getElementById('pdfFile');
+            const fileInput = document.getElementById('fileInput');
             const passwordInput = document.getElementById('ghlToken');
 
             if (!fileInput.files.length) {
@@ -162,21 +166,44 @@
 
             // prepares the processing function to be called when the file is read
             reader.onload = async function (event) {
-                const typedArray = new Uint8Array(event.target.result);
+                const fileName = file.name.toLowerCase();
 
-                // read PDF as buffer
-                const pdf = await pdfjsLib.getDocument(typedArray).promise;
-                let pdfText = ``;
+                let candidateData = {};
 
-                // read every page as text and concat
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const textContent = await page.getTextContent();
-                    const pageText = textContent.items.map(item => item.str).join(' '); // Join text items with space
-                    pdfText += pageText + '\n';
+                if (fileName.endsWith('.pdf')) {
+                    const typedArray = new Uint8Array(event.target.result);
+
+                    // read PDF as buffer
+                    const pdf = await pdfjsLib.getDocument(typedArray).promise;
+                    let pdfText = ``;
+
+                    // read every page as text and concat
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const textContent = await page.getTextContent();
+                        const pageText = textContent.items.map(item => item.str).join(' '); // Join text items with space
+                        pdfText += pageText + '\n';
+                    }
+
+                    const candidateData = formatCandidateData(pdfText);
+                } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+                    const data = new Uint8Array(event.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+
+                    candidateData = {};
+                    for (const row of jsonData) {
+                        if (!row.phone || !row.name) continue;
+                        const phone = String(row.phone);
+                        candidateData[phone] = {
+                            name: normalizeName(row.name)
+                        };
+                    }
+                } else {
+                    alert('Unsupported file type.');
+                    return;
                 }
-
-                const candidateData = formatCandidateData(pdfText);
 
                 await importToGhl(candidateData, ghlToken);
             };
@@ -242,7 +269,7 @@
         async function importToGhl(formattedCandidateData, ghlToken) {
             const results = [];
 
-            // todo delete
+            // test data
             // formattedCandidateData = {
             //     '+573157100964': {
             //         name: 'Juan Felipe Estupiñan Soto'
