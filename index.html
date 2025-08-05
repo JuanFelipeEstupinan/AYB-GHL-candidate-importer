@@ -185,7 +185,7 @@
                         pdfText += pageText + '\n';
                     }
 
-                    const candidateData = formatCandidateData(pdfText);
+                    candidateData = formatCandidateData(pdfText);
                 } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
                     const data = new Uint8Array(event.target.result);
                     const workbook = XLSX.read(data, { type: 'array' });
